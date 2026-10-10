@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 0; color: #172431; }
+    .box { border: 1px solid #d8e2e8; border-radius: 12px; padding: 16px; }
+    .status { background: #edf7fa; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+    .status.ok { background: #e7f7ed; color: #155e35; }
+    .status.bad { background: #fff2e8; color: #9a3412; }
+    pre { overflow: auto; white-space: pre-wrap; background: #f5f7f9; padding: 14px; border-radius: 8px; max-height: 220px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    th, td { border: 1px solid #d8e2e8; padding: 7px; text-align: left; }
+    th { background: #edf7fa; }
+    .table-wrap { max-height: 280px; overflow: auto; }
+    img, canvas { display: block; max-width: 100%; height: auto; margin: 12px 0; }
+    .small { color: #54707f; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div id="status" class="status">Preparando el entorno en tu navegador… La primera carga puede tardar un poco.</div>
+    <div id="output"></div>
+    <div id="media"></div>
+    <div id="feedback"></div>
+    <p class="small">El código se ejecuta en este navegador. Las bases de ejemplo son copias temporales.</p>
+  </div>
+  <script type="module">
+    const config = /*__CONFIG__*/ null;
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
+    const media = document.getElementById('media');
+    const feedback = document.getElementById('feedback');
+    const normalize = value => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const setStatus = (message, kind = '') => {
+      status.textContent = message;
+      status.className = 'status ' + kind;
+    };
+    const appendText = (text) => {
+      if (!text) return;
+      const pre = document.createElement('pre');
+      pre.textContent = text;
+      output.appendChild(pre);
+    };
+    const appendImage = (base64) => {
+      const image = document.createElement('img');
+      image.alt = 'Gráfica generada con el código';
+      image.src = 'data:image/png;base64,' + base64;
+      media.appendChild(image);
+    };
+    const loadScript = (src) => new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('No se pudo descargar ' + src));
+      document.head.appendChild(script);
+    });
+
+    const pyRunner = `
+import ast, base64, contextlib, io, json, os, sys, traceback
+os.chdir('/home/pyodide')
+out = io.StringIO()
+images = []
+error = ''
+try:
+    if 'matplotlib.pyplot' in sys.modules:
+        import matplotlib.pyplot as plt
+        plt.close('all')
+    tree = ast.parse(__datalab_source, filename='<tu_codigo>')
+    scope = {'__name__': '__main__'}
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+        if tree.body and isinstance(tree.body[-1], ast.Expr):
+            last = tree.body.pop()
+            exec(compile(tree, '<tu_codigo>', 'exec'), scope)
+            value = eval(compile(ast.Expression(last.value), '<tu_codigo>', 'eval'), scope)
+            if value is not None:
+                print(value)
+        else:
+            exec(compile(tree, '<tu_codigo>', 'exec'), scope)
+    if 'matplotlib.pyplot' in sys.modules:
+        import matplotlib.pyplot as plt
+        for number in plt.get_fignums()[:3]:
+            buffer = io.BytesIO()
+            plt.figure(number).savefig(buffer, format='png', bbox_inches='tight')
+            images.append(base64.b64encode(buffer.getvalue()).decode('ascii'))
+        plt.close('all')
+except Exception:
+    error = traceback.format_exc(limit=6)
+json.dumps({'stdout': out.getvalue()[:20000], 'error': error[:12000], 'images': images})
+`;
+
+    async function runPython() {
+      const base = 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/';
+      await loadScript(base + 'pyodide.js');
+      const py = await window.loadPyodide({indexURL: base});
+      py.FS.mkdirTree('/home/pyodide/data');
+      for (const [name, csv] of Object.entries(config.csv)) {
+        py.FS.writeFile('/home/pyodide/data/' + name, csv, {encoding: 'utf8'});
+      }
+      await py.loadPackagesFromImports(config.code + '\n' + config.solution);
+      const execute = async source => {
+        py.globals.set('__datalab_source', source);
+        return JSON.parse(await py.runPythonAsync(pyRunner));
+      };
+      const expected = config.solution ? await execute(config.solution) : null;
+      const actual = await execute(config.code);
+      appendText(actual.stdout);
+      actual.images.forEach(appendImage);
+      if (actual.error) {
+        appendText(actual.error);
+        setStatus('El código produjo un error. Revísalo y vuelve a intentar.', 'bad');
+      } else {
+        setStatus('Código Python ejecutado.', 'ok');
+        if (expected) {
+          const passed = config.check === 'plot'
+            ? actual.images.length > 0
+            : normalize(actual.stdout) === normalize(expected.stdout);
+          feedback.textContent = passed ? '¡Resultado correcto!' : 'Se ejecutó; el resultado difiere del esperado. Revisa el reto y la solución.';
+          feedback.className = 'status ' + (passed ? 'ok' : 'bad');
+        }
+      }
+      if (!actual.stdout && !actual.error && !actual.images.length) appendText('(La ejecución terminó sin salida visible.)');
+    }
+
+    function showSqlTable(result) {
+      if (!result) { appendText('Instrucción ejecutada sin tabla de resultados.'); return; }
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      const table = document.createElement('table');
+      const head = document.createElement('tr');
+      for (const column of result.columns) {
+        const cell = document.createElement('th'); cell.textContent = column; head.appendChild(cell);
+      }
+      table.appendChild(head);
+      for (const row of result.values.slice(0, 200)) {
+        const tr = document.createElement('tr');
+        for (const value of row) {
+          const cell = document.createElement('td'); cell.textContent = value == null ? 'NULL' : String(value); tr.appendChild(cell);
+        }
+        table.appendChild(tr);
+      }
+      wrap.appendChild(table); output.appendChild(wrap);
+      if (result.values.length > 200) appendText('Se muestran las primeras 200 filas.');
+    }
+    function sqlSignature(result) {
+      if (!result) return '';
+      const rows = result.values.map(row => JSON.stringify(row.map(value => typeof value === 'number' ? Number(value.toFixed(6)) : value))).sort();
+      return JSON.stringify({columns: result.columns.length, rows});
+    }
+    async function runSql() {
+      const base = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/';
+      await loadScript(base + 'sql-wasm.js');
+      const SQL = await window.initSqlJs({locateFile: file => base + file});
+      const bytes = Uint8Array.from(atob(config.database), char => char.charCodeAt(0));
+      const execute = source => {
+        const db = new SQL.Database(bytes);
+        try { const all = db.exec(source); return all.length ? all[all.length - 1] : null; }
+        finally { db.close(); }
+      };
+      const actual = execute(config.code);
+      showSqlTable(actual);
+      setStatus('Consulta SQL ejecutada.', 'ok');
+      if (config.solution) {
+        const expected = execute(config.solution);
+        const passed = sqlSignature(actual) === sqlSignature(expected);
+        feedback.textContent = passed ? '¡Resultado correcto!' : 'La consulta se ejecutó, pero los valores difieren del reto.';
+        feedback.className = 'status ' + (passed ? 'ok' : 'bad');
+      }
+    }
+
+    async function runR() {
+      const {WebR} = await import('https://webr.r-wasm.org/v0.6.0/webr.mjs');
+      const r = new WebR();
+      await r.init();
+      await r.evalRVoid("dir.create('data', showWarnings=FALSE)");
+      for (const [name, csv] of Object.entries(config.csv)) {
+        await r.FS.writeFile('data/' + name, new TextEncoder().encode(csv));
+      }
+      const codeToCheck = config.code + '\n' + config.solution;
+      const packages = ['dplyr', 'ggplot2'].filter(name => new RegExp('(?:library|require)\\s*\\(\\s*["\\\']?' + name + '\\b', 'i').test(codeToCheck));
+      if (packages.length) {
+        setStatus('Descargando paquetes de R: ' + packages.join(', ') + '…');
+        await r.installPackages(packages);
+      }
+      const capture = async source => {
+        const shelter = await new r.Shelter();
+        try {
+          const result = await shelter.captureR(source, {withAutoprint: true});
+          return {text: result.output.filter(item => item.type === 'stdout' || item.type === 'stderr').map(item => String(item.data)).join('\n'), images: result.images};
+        } finally { await shelter.purge(); }
+      };
+      const expected = config.solution ? await capture(config.solution) : null;
+      if (expected) await r.evalRVoid('rm(list=ls())');
+      const actual = await capture(config.code);
+      appendText(actual.text);
+      for (const bitmap of actual.images.slice(0, 3)) {
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0);
+        media.appendChild(canvas);
+      }
+      setStatus('Código R ejecutado.', 'ok');
+      if (expected) {
+        const passed = config.check === 'plot' ? actual.images.length > 0 : normalize(actual.text) === normalize(expected.text);
+        feedback.textContent = passed ? '¡Resultado correcto!' : 'Se ejecutó; compara el resultado con la solución propuesta.';
+        feedback.className = 'status ' + (passed ? 'ok' : 'bad');
+      }
+      if (!actual.text && !actual.images.length) appendText('(La ejecución terminó sin salida visible.)');
+      r.close();
+    }
+
+    async function main() {
+      if (!config.code.trim()) { setStatus('Escribe código antes de ejecutarlo.', 'bad'); return; }
+      try {
+        if (config.language === 'python') await runPython();
+        else if (config.language === 'sql') await runSql();
+        else await runR();
+      } catch (error) {
+        setStatus('No se pudo ejecutar. Revisa el mensaje y vuelve a intentarlo.', 'bad');
+        appendText(String(error?.stack || error));
+      }
+    }
+    main();
+  </script>
+</body>
+</html>
