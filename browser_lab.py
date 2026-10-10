@@ -8,12 +8,13 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 import streamlit as st
 
 
 ROOT = Path(__file__).resolve().parent
-TEMPLATE = (ROOT / "web_lab.html").read_text(encoding="utf-8")
+RUNNER_URL = "https://rodrigobnks.github.io/Aprender-programas/web_lab.html"
 
 
 def show_browser_result(route: str, code: str, solution: str = "", check: str = "") -> None:
@@ -26,6 +27,6 @@ def show_browser_result(route: str, code: str, solution: str = "", check: str = 
             path.name: path.read_text(encoding="utf-8-sig")
             for path in (ROOT / "data").glob("*.csv")
         }
-    # '<' escapado evita que un texto del editor cierre el elemento <script>.
-    payload = json.dumps(config, ensure_ascii=True).replace("<", "\\u003c")
-    st.iframe(TEMPLATE.replace("/*__CONFIG__*/ null", payload), height=650)
+    payload = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
+    # El fragmento no se envía al servidor de Pages; solo lo lee el ejecutor.
+    st.iframe(RUNNER_URL + "#" + quote(payload, safe=""), height=650)
