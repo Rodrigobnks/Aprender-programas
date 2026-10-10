@@ -171,7 +171,8 @@ json.dumps({'stdout': out.getvalue()[:20000], 'error': error[:12000], 'images': 
 
     async function runR() {
       const {WebR} = await import('https://webr.r-wasm.org/v0.6.0/webr.mjs');
-      const r = new WebR();
+      // srcdoc no proporciona una URL base válida para los archivos del worker.
+      const r = new WebR({baseUrl: 'https://webr.r-wasm.org/v0.6.0/'});
       await r.init();
       await r.evalRVoid("dir.create('data', showWarnings=FALSE)");
       for (const [name, csv] of Object.entries(config.csv)) {
