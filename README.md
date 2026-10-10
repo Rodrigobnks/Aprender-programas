@@ -2,12 +2,20 @@
 
 Plataforma para aprender **Python, SQL, R y Power BI/DAX** desde introducción hasta avanzado. Contiene 48 lecciones, editores vacíos para escribir desde cero, ejemplos, ejercicios, preguntas de repaso, bases de datos y un creador de gráficas.
 
+## Abrir y compartir
+
+- [Curso público en Streamlit](https://aprender-programas-rodrigobnks.streamlit.app/)
+- [Código fuente en GitHub](https://github.com/Rodrigobnks/Aprender-programas)
+
+La URL de Streamlit funciona desde otros equipos con conexión a Internet. Python, SQL y R ejecutan las prácticas en el navegador; el archivo `web_lab.html` se sirve mediante GitHub Pages para que WebR pueda iniciar desde una página HTTPS.
+
 ## Compartir con Streamlit Community Cloud
 
 1. Publica esta carpeta en un repositorio de GitHub. No incluyas `.venv` ni `progreso.json`.
 2. En [Streamlit Community Cloud](https://share.streamlit.io/), elige **Create app** y conecta el repositorio.
 3. Selecciona la rama `main` y usa **`app_public.py`** como archivo principal. Este punto de entrada es necesario para la edición pública.
-4. Streamlit instalará las dependencias de `requirements.txt` y entregará una URL `https://...streamlit.app` que puedes compartir.
+4. Activa GitHub Pages desde la rama `main` y la carpeta raíz. Si usas otro repositorio, cambia `RUNNER_URL` en `browser_lab.py` por la dirección de su `web_lab.html` publicado en Pages.
+5. Streamlit instalará las dependencias de `requirements.txt` y entregará una URL `https://...streamlit.app` que puedes compartir.
 
 En la edición pública, Python se ejecuta con Pyodide, SQL con sql.js y R con WebR dentro del navegador del visitante. La primera ejecución descarga los motores y, cuando se requieren, paquetes como pandas, matplotlib, dplyr o ggplot2. Se necesita conexión a Internet. Las soluciones se comparan en el mismo navegador. El progreso dura durante la sesión abierta; no hay cuentas ni sincronización entre dispositivos. DAX se comprueba como fórmula y muestra una vista previa didáctica: su motor real sigue siendo Power BI.
 
