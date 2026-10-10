@@ -27,7 +27,12 @@
     <p class="small">El código se ejecuta en este navegador. Las bases de ejemplo son copias temporales.</p>
   </div>
   <script type="module">
-    const config = /*__CONFIG__*/ null;
+    const embeddedConfig = /*__CONFIG__*/ null;
+    let config = embeddedConfig;
+    if (!config) {
+      try { config = JSON.parse(decodeURIComponent(location.hash.slice(1))); }
+      catch { config = null; }
+    }
     const status = document.getElementById('status');
     const output = document.getElementById('output');
     const media = document.getElementById('media');
@@ -212,6 +217,7 @@ json.dumps({'stdout': out.getvalue()[:20000], 'error': error[:12000], 'images': 
     }
 
     async function main() {
+      if (!config) { setStatus('Abre una práctica desde DataLab para ejecutar código.', 'bad'); return; }
       if (!config.code.trim()) { setStatus('Escribe código antes de ejecutarlo.', 'bad'); return; }
       try {
         if (config.language === 'python') await runPython();
